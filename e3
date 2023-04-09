@@ -1,0 +1,62 @@
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_ADXL345_U.h>
+#include <Adafruit_BMP280.h>
+
+Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345);
+Adafruit_BMP280 bmp;
+
+float ground_pressure = 101325.0;  // standard sea level pressure in Pa
+float altitude = 0.0;  // initial altitude
+float velocity = 0.0;  // initial velocity
+float dt = 0.1;  // time interval in seconds
+float prev_altitude = 0.0;
+float prev_velocity = 0.0;
+
+void setup() {
+  Serial.begin(9600);
+  while (!Serial) {
+    delay(10); 
+  }
+  if (!accel.begin()) {
+    Serial.println("Could not find a valid ADXL345 sensor, check wiring!");
+    while (1);
+  }
+  if (!bmp.begin(0x76)) {
+    Serial.println("Could not find a valid BMP280 sensor, check wiring!");
+    while (1);
+  }
+  ground_pressure = bmp.readPressure();
+}
+
+void loop() {
+  sensors_event_t event; 
+  accel.getEvent(&event);
+  
+  float acceleration = sqrt(pow(event.acceleration.x, 2) + pow(event.acceleration.y, 2) + pow(event.acceleration.z, 2));
+  float pressure = bmp.readPressure();
+  float temperature = bmp.readTemperature();
+  
+  // convert pressure to altitude using the standard atmosphere model
+  float sea_level_pressure = 101325.0;  // standard sea level pressure in Pa
+  float pressure_ratio = pow(ground_pressure / pressure, 1.0 / 5.257);
+  altitude = (1 - pressure_ratio) * 44330.0;
+  
+  // calculate velocity using the trapezoidal rule
+  velocity = prev_velocity + (acceleration + prev_acceleration) / 2.0 * dt;
+  
+  Serial.print("Acceleration: ");
+  Serial.println(acceleration);
+  Serial.print("Pressure: ");
+  Serial.println(pressure);
+  Serial.print("Altitude: ");
+  Serial.println(altitude);
+  Serial.print("Velocity: ");
+  Serial.println(velocity);
+
+  prev_acceleration = acceleration;
+  prev_velocity = velocity;
+  prev_altitude = altitude;
+
+  delay(100);
+}
