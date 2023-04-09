@@ -1,0 +1,88 @@
+#include <boost/asio.hpp>
+#include <iostream>
+#include <sstream>
+#include <fstream>
+#include <chrono>
+#include <cmath>
+
+using namespace boost::asio;
+
+int main()
+{
+    // Create an I/O service object
+    io_service io;
+
+    // Create a serial port object and configure its settings
+    serial_port port(io, "/dev/ttyUSB0");
+    port.set_option(serial_port_base::baud_rate(9600));
+    port.set_option(serial_port_base::character_size(8));
+    port.set_option(serial_port_base::parity(serial_port_base::parity::none));
+    port.set_option(serial_port_base::stop_bits(serial_port_base::stop_bits::one));
+
+    // Create a timer object for timeout handling
+    deadline_timer timer(io);
+
+    // Read data from the remote device
+    const int max_length = 1024;
+    char data[max_length];
+    size_t length = 0;
+
+    // Constants for the mathematical model
+    const float k = 1.4f;
+    const float g0 = 9.80665f;
+    const float R = 287.058f;
+    const float P0 = 101325.0f;
+    const float T0 = 288.15f;
+    const float L = 0.0065f;
+
+    // Variables for the mathematical model
+    float pressure, temperature;
+    float altitude = 0.0f, apogee = 0.0f;
+    bool apogee_found = false;
+
+    while (true) {
+        try {
+            // Set a timeout of 5 seconds
+            timer.expires_from_now(boost::posix_time::seconds(5));
+
+            // Start the timer
+            timer.async_wait([&](const boost::system::error_code& error) {
+                if (error != boost::asio::error::operation_aborted) {
+                    port.cancel();
+                }
+            });
+
+            // Read data from the port
+            length = read_until(port, buffer(data, max_length), "\n");
+
+            // Cancel the timer
+            timer.cancel();
+
+            // Break out of the loop if we got data
+            if (length > 0) {
+                break;
+            }
+
+        } catch (const std::exception& e) {
+            std::cerr << "Error: " << e.what() << std::endl;
+        }
+
+        // Sleep for 1 second before trying again
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+
+    // Parse the data and extract the pressure and temperature values
+    std::istringstream iss(data);
+    std::string token;
+    std::getline(iss, token, ','); pressure = std::stof(token);
+    std::getline(iss, token, ','); temperature = std::stof(token);
+
+    // Calculate the altitude from the pressure using the mathematical model
+    altitude = (pow((P0 / pressure), (1.0f / k)) - 1.0f) * ((temperature + 273.15f) / (k * g0 / R)) + L * T0;
+
+    // Check if we have reached apogee
+    if (altitude > apogee) {
+        apogee = altitude;
+    } else if (!apogee_found) {
+        apogee_found = true;
+        std::cout << "Apogee reached at "
