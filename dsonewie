@@ -1,0 +1,38 @@
+#include <OneWire.h>
+
+// Pin to which the DS18B20 is connected
+const int oneWirePin = 2;
+
+// Create a OneWire instance
+OneWire oneWire(oneWirePin);
+
+// Buffer to store the temperature reading
+byte temperature[2];
+
+void setup() {
+  // Start serial communication
+  Serial.begin(9600);
+}
+
+void loop() {
+  // Send the "Read Scratchpad" command to the DS18B20
+  oneWire.reset();
+  oneWire.skip(); // Skip ROM
+  oneWire.write(0xBE); // Read Scratchpad
+  
+  // Read the temperature from the DS18B20
+  for (int i = 0; i < 2; i++) {
+    temperature[i] = oneWire.read();
+  }
+  
+  // Calculate the temperature value in Celsius
+  float celsius = (temperature[1] << 8 | temperature[0]) * 0.0625;
+  
+  // Print the temperature value to the serial monitor
+  Serial.print("Temperature: ");
+  Serial.print(celsius);
+  Serial.println(" C");
+  
+  // Wait for 1 second
+  delay(1000);
+}
